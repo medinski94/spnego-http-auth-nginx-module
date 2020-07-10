@@ -115,6 +115,7 @@ typedef struct {
     ngx_flag_t allow_basic;
     ngx_array_t *auth_princs;
     ngx_flag_t map_to_local;
+    ngx_flag_t enable_bogus;
 } ngx_http_auth_spnego_loc_conf_t;
 
 #define SPNEGO_NGX_CONF_FLAGS NGX_HTTP_MAIN_CONF\
@@ -188,6 +189,13 @@ static ngx_command_t ngx_http_auth_spnego_commands[] = {
         offsetof(ngx_http_auth_spnego_loc_conf_t, map_to_local),
         NULL},
 
+    {ngx_string("auth_gss_enable_bogus_header"),
+        SPNEGO_NGX_CONF_FLAGS,
+        ngx_conf_set_flag_slot,
+        NGX_HTTP_LOC_CONF_OFFSET,
+        offsetof(ngx_http_auth_spnego_loc_conf_t, enable_bogus),
+        NULL},
+
     ngx_null_command
 };
 
@@ -239,6 +247,7 @@ ngx_http_auth_spnego_create_loc_conf(
     conf->allow_basic = NGX_CONF_UNSET;
     conf->auth_princs = NGX_CONF_UNSET_PTR;
     conf->map_to_local = NGX_CONF_UNSET;
+    conf->enable_bogus = NGX_CONF_UNSET;
 
     return conf;
 }
@@ -267,6 +276,8 @@ ngx_http_auth_spnego_merge_loc_conf(
 
     ngx_conf_merge_off_value(conf->map_to_local, prev->map_to_local, 0);
 
+    ngx_conf_merge_off_value(conf->enable_bogus, prev->enable_bogus, 1);
+
 #if (NGX_DEBUG)
     ngx_conf_log_error(NGX_LOG_INFO, cf, 0, "auth_spnego: protect = %i",
             conf->protect);
@@ -284,6 +295,8 @@ ngx_http_auth_spnego_merge_loc_conf(
             conf->allow_basic);
     ngx_conf_log_error(NGX_LOG_INFO, cf, 0, "auth_spnego: force_realm = %i",
             conf->force_realm);
+    ngx_conf_log_error(NGX_LOG_INFO, cf, 0, "auth_spnego: enable_bogus = %i",
+            conf->enable_bogus);
     if (NGX_CONF_UNSET_PTR != conf->auth_princs) {
         size_t ii = 0;
         ngx_str_t *auth_princs = conf->auth_princs->elts;
@@ -985,8 +998,10 @@ ngx_http_auth_spnego_auth_user_gss(
         }
 
         /* this for the sake of ngx_http_variable_remote_user */
-        if (ngx_http_auth_spnego_set_bogus_authorization(r) != NGX_OK) {
-            spnego_log_error("Failed to set remote_user");
+        if(alcf->enable_bogus){
+            if (ngx_http_auth_spnego_set_bogus_authorization(r) != NGX_OK) {
+                spnego_log_error("Failed to set remote_user");
+            }
         }
         spnego_debug1("user is %V", &r->headers_in.user);
     }
